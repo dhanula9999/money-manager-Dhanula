@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Money Manager (LKR + CNY)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --bg:#0b0e14;
+  --card:#161b26;
+  --accent:#22d3ee;
+  --accent2:#38bdf8;
+  --text:#e5e7eb;
+  --danger:#f87171;
+  --success:#4ade80;
+  --warn:#facc15;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Inter,Segoe UI,Arial;
+  background:linear-gradient(135deg,#0b0e14,#111827);
+  color:var(--text);
+}
+header{
+  text-align:center;
+  padding:22px;
+  font-size:28px;
+  font-weight:700;
+}
+.container{
+  padding:20px;
+  display:grid;
+  gap:24px;
+}
+.card{
+  background:linear-gradient(180deg,var(--card),#0f1420);
+  padding:20px;
+  border-radius:18px;
+  box-shadow:0 10px 30px rgba(0,0,0,.4);
+}
+input,select,button{
+  padding:10px 12px;
+  border-radius:10px;
+  border:none;
+  background:#0b1020;
+  color:var(--text);
+}
+button{
+  cursor:pointer;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#06281d;
+  font-weight:700;
+}
+button.danger{background:var(--danger);color:white}
+.form{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:12px;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+th,td{
+  border:1px solid #1f2937;
+  padding:10px;
+  text-align:center;
+}
+th{background:#0b1020}
+.stats{
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap;
+  justify-content:center;
+  margin-top:14px;
+}
+.stats span{
+  background:#0b0f1a;
+  padding:12px 18px;
+  border-radius:14px;
+  font-weight:600;
+}
+.chart-box{height:240px}
+.chart-box.small{height:210px}
+canvas{width:100%!important;height:100%!important}
+
+.progress{
+  width:70%;
+  height:10px;
+  background:#1f2937;
+  border-radius:10px;
+  margin:8px auto;
+  overflow:hidden;
+}
+.progress div{
+  height:100%;
+  width:0%;
+  background:var(--success);
+  transition:width .4s;
+}
+.warning{
+  color:var(--danger);
+  font-size:14px;
+  margin-top:6px;
+  display:none;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  Money Manager (LKR + CNY)
+  <div id="rateDisplay" style="margin-top:8px;font-size:16px;color:#38bdf8">
+    1 CNY = Rs 0.00
+  </div>
+  <div id="incomeDisplay" style="margin-top:4px;font-size:15px;color:#22d3ee">
+    All Money: ¥ 0.00 (Rs 0.00)
+  </div>
+  <div id="balanceDisplay" style="margin-top:4px;font-size:15px;color:#4ade80">
+    Balance: ¥ 0.00 (Rs 0.00)
+  </div>
+
+  <div class="progress"><div id="saveBar"></div></div>
+  <div class="warning" id="warnText">⚠ Overspending! Expenses exceeded All Money</div>
+</header>
+
+<div class="container">
+
+<div class="card">
+  <h3>Chinese Yuan Exchange Rate & All Money</h3>
+  <div class="form">
+    <input type="number" id="rate" step="0.01" placeholder="1 CNY = LKR">
+    <input type="number" id="incomeCNY" placeholder="All Money (CNY)">
+    <button onclick="saveRate()">Save</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Add Expense (CNY)</h3>
+  <div class="form">
+    <input type="date" id="date">
+    <select id="category">
+      <option>Food</option>
+      <option>Travel</option>
+      <option>Bills</option>
+      <option>Shopping</option>
+      <option>Other</option>
+    </select>
+    <input type="number" id="amountCNY" placeholder="Amount (CNY)">
+    <input type="text" id="note" placeholder="Note">
+    <button onclick="addExpense()">Add</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Daily Spending (CNY)</h3>
+  <div class="chart-box"><canvas id="dayChart"></canvas></div>
+
+  <h3 style="margin-top:26px">Monthly Category (CNY)</h3>
+  <div class="chart-box small"><canvas id="monthChart"></canvas></div>
+
+  <h3 style="margin-top:26px">Yearly Spending (12 Months - CNY)</h3>
+  <div class="chart-box small"><canvas id="yearChart"></canvas></div>
+
+  <div style="margin-top:12px;text-align:center">
+    Month:
+    <select id="month"></select>
+  </div>
+
+  <div class="stats" id="stats"></div>
+</div>
+
+<div class="card">
+  <h3>Expenses</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Category</th>
+        <th>CNY</th>
+        <th>LKR</th>
+        <th>Note</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="list"></tbody>
+  </table>
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+Chart.defaults.color="#e5e7eb";
+
+const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const monthSel=document.getElementById("month");
+months.forEach((m,i)=>{
+  const o=document.createElement("option");
+  o.value=i;o.textContent=m;
+  monthSel.appendChild(o);
+});
+monthSel.value=new Date().getMonth();
+
+function rate(){return +localStorage.getItem("cnyRate")||45}
+function income(){return +localStorage.getItem("monthlyIncome")||0}
+
+const rateInput=document.getElementById("rate");
+const incomeCNY=document.getElementById("incomeCNY");
+rateInput.value=rate();
+incomeCNY.value=income();
+
+function saveRate(){
+  localStorage.setItem("cnyRate",rateInput.value);
+  localStorage.setItem("monthlyIncome",incomeCNY.value);
+  render();
+}
+
+function key(m=monthSel.value){return "exp-"+m}
+function load(m){return JSON.parse(localStorage.getItem(key(m)))||[]}
+function save(d){localStorage.setItem(key(),JSON.stringify(d))}
+
+function addExpense(){
+  if(!date.value||!amountCNY.value) return;
+  const cny=+amountCNY.value;
+  const lkr=cny*rate();
+  const d=load();
+  d.push({d:date.value,c:category.value,lkr,cny,n:note.value});
+  save(d);
+  amountCNY.value="";note.value="";
+  render();
+}
+function del(i){
+  const d=load();
+  d.splice(i,1);
+  save(d);render();
+}
+
+/* ✅ FIXED CHART INITIALIZATION */
+const dayChart=new Chart(document.getElementById("dayChart"),{
+  type:"line",
+  data:{labels:[],datasets:[{
+    label:"Daily Spending (CNY)",
+    data:[],
+    borderColor:"#22d3ee",
+    backgroundColor:"rgba(34,211,238,0.15)",
+    fill:true,
+    tension:.35
+  }]},
+  options:{maintainAspectRatio:false}
+});
+
+const monthChart=new Chart(document.getElementById("monthChart"),{
+  type:"bar",
+  data:{labels:["Food","Travel","Bills","Shopping","Other"],datasets:[{data:[],backgroundColor:"#38bdf8"}]},
+  options:{maintainAspectRatio:false}
+});
+
+const yearChart=new Chart(document.getElementById("yearChart"),{
+  type:"bar",
+  data:{labels:months,datasets:[{data:[],backgroundColor:"#22d3ee"}]},
+  options:{maintainAspectRatio:false}
+});
+
+function render(){
+  const data=load();
+  list.innerHTML="";
+  let days={},cats={Food:0,Travel:0,Bills:0,Shopping:0,Other:0};
+
+  data.forEach((e,i)=>{
+    const day=new Date(e.d).getDate();
+    days[day]=(days[day]||0)+e.cny;
+    cats[e.c]+=e.cny;
+    list.innerHTML+=`
+    <tr>
+      <td>${e.d}</td><td>${e.c}</td>
+      <td>¥ ${e.cny.toFixed(2)}</td>
+      <td>Rs ${e.lkr.toFixed(2)}</td>
+      <td>${e.n||""}</td>
+      <td><button class="danger" onclick="del(${i})">✕</button></td>
+    </tr>`;
+  });
+
+  const spent=data.reduce((a,b)=>a+b.cny,0);
+  const inc=income();
+  const balance=inc-spent;
+
+  rateDisplay.innerText=`1 CNY = Rs ${rate().toFixed(2)}`;
+  incomeDisplay.innerText=`All Money: ¥ ${inc.toFixed(2)} (Rs ${(inc*rate()).toFixed(2)})`;
+  balanceDisplay.innerText=`Balance: ¥ ${balance.toFixed(2)} (Rs ${(balance*rate()).toFixed(2)})`;
+
+  const percent=inc>0?Math.max(0,(balance/inc)*100):0;
+  saveBar.style.width=percent+"%";
+  saveBar.style.background=balance<0?"var(--danger)":percent<30?"var(--warn)":"var(--success)";
+  warnText.style.display=balance<0?"block":"none";
+
+  dayChart.data.labels=Object.keys(days);
+  dayChart.data.datasets[0].data=Object.values(days);
+  dayChart.update();
+
+  monthChart.data.datasets[0].data=Object.values(cats);
+  monthChart.update();
+
+  yearChart.data.datasets[0].data=
+    months.map((_,m)=>load(m).reduce((a,b)=>a+b.cny,0));
+  yearChart.update();
+}
+monthSel.onchange=render;
+render();
+</script>
+
+</body>
+</html>
